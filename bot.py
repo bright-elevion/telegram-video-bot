@@ -20,8 +20,9 @@ from telegram.ext import (
 
 # =========================================
 # BOT TOKEN
-# =============================
+# =========================================
 BOT_TOKEN = "7764954344:AAECpipMlU6jK4rGW7b063ljsbi_RW-R4hI"
+
 # =========================================
 # DOWNLOAD FOLDER
 # =========================================
@@ -52,9 +53,40 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================
 # DOWNLOAD VIDEO
 # =========================================
-def download_video(url, quality):
+def download_video(url, quality, progress_callback=None):
+
+    def hook(d):
+
+        if d['status'] == 'downloading':
+
+            downloaded = d.get('downloaded_bytes', 0)
+
+            total = (
+                d.get('total_bytes')
+                or d.get('total_bytes_estimate')
+                or 0
+            )
+
+            if total > 0:
+
+                percent = downloaded / total * 100
+
+                if progress_callback:
+
+                    progress_callback(
+                        f"Downloading: {percent:.1f}%"
+                    )
+
+        elif d['status'] == 'finished':
+
+            if progress_callback:
+
+                progress_callback(
+                    "Merging video and audio..."
+                )
 
     ydl_opts = {
+
         'format': (
             f'bestvideo[height<={quality}]'
             f'+bestaudio/'
@@ -70,7 +102,9 @@ def download_video(url, quality):
 
         'noplaylist': True,
 
-        'quiet': False,
+        'quiet': True,
+
+        'progress_hooks': [hook],
     }
 
     with YoutubeDL(ydl_opts) as ydl:
@@ -220,52 +254,63 @@ async def button_handler(
 
         for count, url in enumerate(urls, start=1):
 
-            await status.edit_text(
-                f"Downloading {count}/{total}..."
-            )
-
             loop = asyncio.get_event_loop()
 
-            last_update = {"text": ""}
+            last_update = {
+                "text": f"Downloading {count}/{total}..."
+            }
 
-def progress(text):
+            # =============================
+            # PROGRESS CALLBACK
+            # =============================
+            def progress(text):
 
-    last_update["text"] = text
-
-async def updater():
-
-    while True:
-
-        try:
-
-            if last_update["text"]:
-
-                await status.edit_text(
-                    last_update["text"]
+                last_update["text"] = (
+                    f"{count}/{total}\n{text}"
                 )
 
-        except:
-            pass
+            # =============================
+            # UPDATE TELEGRAM MESSAGE
+            # =============================
+            async def updater():
 
-        await asyncio.sleep(2)
+                while True:
 
-update_task = asyncio.create_task(
-    updater()
-)
+                    try:
 
-file_path = await loop.run_in_executor(
-    None,
-    download_video,
-    url,
-    quality,
-    progress,
-)
+                        await status.edit_text(
+                            last_update["text"]
+                        )
 
-update_task.cancel()
+                    except:
+                        pass
+
+                    await asyncio.sleep(2)
+
+            update_task = asyncio.create_task(
+                updater()
+            )
+
+            # =============================
+            # DOWNLOAD
+            # =============================
+            file_path = await loop.run_in_executor(
+                None,
+                download_video,
+                url,
+                quality,
+                progress,
+            )
+
+            update_task.cancel()
+
             await status.edit_text(
                 f"Uploading {count}/{total}..."
             )
 
+            # =============================
+            # UPLOAD VIDEO
+            # =============================
             with open(file_path, "rb") as video:
 
                 await query.message.reply_video(
@@ -273,7 +318,9 @@ update_task.cancel()
                     supports_streaming=True,
                 )
 
-            # DELETE FILE AFTER UPLOAD
+            # =============================
+            # DELETE FILE
+            # =============================
             if os.path.exists(file_path):
 
                 os.remove(file_path)
@@ -333,4 +380,3 @@ def main():
 if __name__ == "__main__":
 
     main()
-    
