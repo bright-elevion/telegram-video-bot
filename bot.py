@@ -226,13 +226,42 @@ async def button_handler(
 
             loop = asyncio.get_event_loop()
 
-            file_path = await loop.run_in_executor(
-                None,
-                download_video,
-                url,
-                quality,
-            )
+            last_update = {"text": ""}
 
+def progress(text):
+
+    last_update["text"] = text
+
+async def updater():
+
+    while True:
+
+        try:
+
+            if last_update["text"]:
+
+                await status.edit_text(
+                    last_update["text"]
+                )
+
+        except:
+            pass
+
+        await asyncio.sleep(2)
+
+update_task = asyncio.create_task(
+    updater()
+)
+
+file_path = await loop.run_in_executor(
+    None,
+    download_video,
+    url,
+    quality,
+    progress,
+)
+
+update_task.cancel()
             await status.edit_text(
                 f"Uploading {count}/{total}..."
             )
