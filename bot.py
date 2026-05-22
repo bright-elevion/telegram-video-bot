@@ -37,12 +37,12 @@ os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 user_links = {}
 
 # =========================================
-# SAFE FILE NAME
+# CLEAN FILE NAME
 # =========================================
 def clean_filename(name):
 
     return re.sub(
-        r'[\\\\/*?:"<>|]',
+        r'[\\/*?:"<>|]',
         "",
         name
     )
@@ -50,7 +50,10 @@ def clean_filename(name):
 # =========================================
 # START COMMAND
 # =========================================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     text = (
         "Send a video URL.\n\n"
@@ -65,7 +68,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================
 # DOWNLOAD VIDEO
 # =========================================
-def download_video(url, quality, progress_callback=None):
+def download_video(
+    url,
+    quality,
+    progress_callback=None
+):
 
     def hook(d):
 
@@ -128,11 +135,8 @@ def download_video(url, quality, progress_callback=None):
 
         'progress_hooks': [hook],
 
-        'extractor_args': {
-            'generic': {
-                'impersonate': []
-            }
-        },
+        # IMPORTANT FIX
+        'impersonate': 'chrome',
     }
 
     with YoutubeDL(ydl_opts) as ydl:
@@ -142,16 +146,24 @@ def download_video(url, quality, progress_callback=None):
             download=True
         )
 
-        filename = ydl.prepare_filename(info)
+        filename = ydl.prepare_filename(
+            info
+        )
 
-        filename = clean_filename(filename)
+        filename = clean_filename(
+            filename
+        )
 
-        base = os.path.splitext(filename)[0]
+        base = os.path.splitext(
+            filename
+        )[0]
 
         merged_file = base + ".mp4"
 
-        # FIND MERGED FILE
-        for file in os.listdir(DOWNLOAD_FOLDER):
+        # FIND FINAL MP4
+        for file in os.listdir(
+            DOWNLOAD_FOLDER
+        ):
 
             if file.endswith(".mp4"):
 
@@ -161,7 +173,9 @@ def download_video(url, quality, progress_callback=None):
                 )
 
         # FALLBACK
-        if os.path.exists(merged_file):
+        if os.path.exists(
+            merged_file
+        ):
 
             return merged_file
 
@@ -181,7 +195,9 @@ async def handle_message(
 
     parts = text.split()
 
-    # MULTI EPISODES
+    # =====================================
+    # MULTI EPISODE MODE
+    # =====================================
     if "{}" in text and len(parts) == 3:
 
         base_url = parts[0]
@@ -218,6 +234,9 @@ async def handle_message(
 
     else:
 
+        # =================================
+        # SINGLE VIDEO MODE
+        # =================================
         if not text.startswith("http"):
 
             await update.message.reply_text(
@@ -230,7 +249,9 @@ async def handle_message(
             update.effective_user.id
         ] = [text]
 
+    # =====================================
     # QUALITY BUTTONS
+    # =====================================
     keyboard = [
         [
             InlineKeyboardButton(
@@ -307,14 +328,18 @@ async def button_handler(
                 f"{count}/{total}..."
             }
 
+            # =================================
             # PROGRESS CALLBACK
+            # =================================
             def progress(text):
 
                 last_update["text"] = (
                     f"{count}/{total}\n{text}"
                 )
 
-            # TELEGRAM UPDATER
+            # =================================
+            # TELEGRAM MESSAGE UPDATER
+            # =================================
             async def updater():
 
                 while True:
@@ -334,7 +359,9 @@ async def button_handler(
                 updater()
             )
 
+            # =================================
             # DOWNLOAD
+            # =================================
             file_path = await loop.run_in_executor(
                 None,
                 download_video,
@@ -350,8 +377,12 @@ async def button_handler(
                 f"{count}/{total}..."
             )
 
+            # =================================
             # CHECK FILE
-            if not os.path.exists(file_path):
+            # =================================
+            if not os.path.exists(
+                file_path
+            ):
 
                 await status.edit_text(
                     "Downloaded file missing."
@@ -359,8 +390,13 @@ async def button_handler(
 
                 continue
 
+            # =================================
             # UPLOAD VIDEO
-            with open(file_path, "rb") as video:
+            # =================================
+            with open(
+                file_path,
+                "rb"
+            ) as video:
 
                 await query.message.reply_video(
                     video=video,
@@ -371,8 +407,12 @@ async def button_handler(
                     pool_timeout=120,
                 )
 
+            # =================================
             # DELETE FILE
-            if os.path.exists(file_path):
+            # =================================
+            if os.path.exists(
+                file_path
+            ):
 
                 os.remove(file_path)
 
@@ -387,17 +427,24 @@ async def button_handler(
         )
 
 # =========================================
-# MAIN
-# =========================================
 # ERROR HANDLER
 # =========================================
-async def error_handler(update, context):
+async def error_handler(
+    update,
+    context
+):
 
-    print("ERROR:", context.error)
+    print(
+        "ERROR:",
+        context.error
+    )
 
     try:
 
-        if update and update.effective_message:
+        if (
+            update
+            and update.effective_message
+        ):
 
             await update.effective_message.reply_text(
                 f"Error:\n{context.error}"
@@ -405,7 +452,14 @@ async def error_handler(update, context):
 
     except Exception as e:
 
-        print("Error while sending error message:", e)
+        print(
+            "Error while sending "
+            "error message:",
+            e
+        )
+
+# =========================================
+# MAIN
 # =========================================
 def main():
 
@@ -438,6 +492,10 @@ def main():
         CallbackQueryHandler(
             button_handler
         )
+    )
+
+    app.add_error_handler(
+        error_handler
     )
 
     print("Bot is running...")
