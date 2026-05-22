@@ -55,6 +55,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================
 def download_video(url, quality, progress_callback=None):
 
+    final_file = {"path": None}
+
     def hook(d):
 
         if d['status'] == 'downloading':
@@ -114,16 +116,23 @@ def download_video(url, quality, progress_callback=None):
             download=True
         )
 
-        filename = ydl.prepare_filename(info)
+        # FINAL MERGED FILE
+        final_path = ydl.prepare_filename(info)
 
-        base, ext = os.path.splitext(filename)
+        base = os.path.splitext(final_path)[0]
 
-        mp4_file = base + ".mp4"
+        merged_file = base + ".mp4"
 
-        if os.path.exists(mp4_file):
-            return mp4_file
+        # USE MERGED FILE IF EXISTS
+        if os.path.exists(merged_file):
 
-        return filename
+            final_file["path"] = merged_file
+
+        else:
+
+            final_file["path"] = final_path
+
+    return final_file["path"]
 
 # =========================================
 # HANDLE MESSAGE
