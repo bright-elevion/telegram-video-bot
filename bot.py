@@ -55,8 +55,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================================
 def download_video(url, quality, progress_callback=None):
 
-    final_file = {"path": None}
-
     def hook(d):
 
         if d['status'] == 'downloading':
@@ -116,23 +114,19 @@ def download_video(url, quality, progress_callback=None):
             download=True
         )
 
-        # FINAL MERGED FILE
         final_path = ydl.prepare_filename(info)
 
         base = os.path.splitext(final_path)[0]
 
         merged_file = base + ".mp4"
 
-        # USE MERGED FILE IF EXISTS
+        # RETURN MERGED FILE
         if os.path.exists(merged_file):
 
-            final_file["path"] = merged_file
+            return merged_file
 
-        else:
-
-            final_file["path"] = final_path
-
-    return final_file["path"]
+        # FALLBACK
+        return final_path
 
 # =========================================
 # HANDLE MESSAGE
@@ -269,18 +263,18 @@ async def button_handler(
                 "text": f"Downloading {count}/{total}..."
             }
 
-            # =============================
+            # =================================
             # PROGRESS CALLBACK
-            # =============================
+            # =================================
             def progress(text):
 
                 last_update["text"] = (
                     f"{count}/{total}\n{text}"
                 )
 
-            # =============================
-            # UPDATE TELEGRAM MESSAGE
-            # =============================
+            # =================================
+            # TELEGRAM MESSAGE UPDATER
+            # =================================
             async def updater():
 
                 while True:
@@ -300,9 +294,9 @@ async def button_handler(
                 updater()
             )
 
-            # =============================
+            # =================================
             # DOWNLOAD
-            # =============================
+            # =================================
             file_path = await loop.run_in_executor(
                 None,
                 download_video,
@@ -317,9 +311,20 @@ async def button_handler(
                 f"Uploading {count}/{total}..."
             )
 
-            # =============================
+            # =================================
+            # CHECK FILE EXISTS
+            # =================================
+            if not os.path.exists(file_path):
+
+                await status.edit_text(
+                    "File not found after download."
+                )
+
+                continue
+
+            # =================================
             # UPLOAD VIDEO
-            # =============================
+            # =================================
             with open(file_path, "rb") as video:
 
                 await query.message.reply_video(
@@ -327,9 +332,9 @@ async def button_handler(
                     supports_streaming=True,
                 )
 
-            # =============================
+            # =================================
             # DELETE FILE
-            # =============================
+            # =================================
             if os.path.exists(file_path):
 
                 os.remove(file_path)
