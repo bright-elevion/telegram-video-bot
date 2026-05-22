@@ -389,6 +389,24 @@ async def button_handler(
 # =========================================
 # MAIN
 # =========================================
+# ERROR HANDLER
+# =========================================
+async def error_handler(update, context):
+
+    print("ERROR:", context.error)
+
+    try:
+
+        if update and update.effective_message:
+
+            await update.effective_message.reply_text(
+                f"Error:\n{context.error}"
+            )
+
+    except Exception as e:
+
+        print("Error while sending error message:", e)
+# =========================================
 def main():
 
     app = (
