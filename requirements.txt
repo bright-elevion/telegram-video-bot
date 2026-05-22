@@ -1,2 +1,6 @@
-python-telegram-bot
-yt-dlp
+python-telegram-bot==22.1
+yt-dlp[default]
+brotli
+certifi
+requests
+curl-cffi
