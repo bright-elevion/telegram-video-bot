@@ -1,6 +1,6 @@
 import os
-import uuid
 import re
+import uuid
 import asyncio
 
 from yt_dlp import YoutubeDL
@@ -29,7 +29,6 @@ BOT_TOKEN = "7764954344:AAECpipMlU6jK4rGW7b063ljsbi_RW-R4hI"
 # DOWNLOAD FOLDER
 # =========================================
 DOWNLOAD_FOLDER = "downloads"
-TEMP_FILE_PREFIX = "yt_dlp_"
 
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
@@ -75,6 +74,8 @@ def download_video(
     quality,
     progress_callback=None
 ):
+
+    unique_id = str(uuid.uuid4())
 
     def hook(d):
 
@@ -124,7 +125,7 @@ def download_video(
 
         'outtmpl': os.path.join(
             DOWNLOAD_FOLDER,
-            f'{TEMP_FILE_PREFIX}%(id)s.%(ext)s'
+            f'{unique_id}.%(ext)s'
         ),
 
         'merge_output_format': 'mp4',
@@ -137,9 +138,12 @@ def download_video(
 
         'progress_hooks': [hook],
 
-        # IMPORTANT FIX
         'impersonate': 'chrome',
-        'paths': {'home': DOWNLOAD_FOLDER}, # Ensure yt-dlp uses the DOWNLOAD_FOLDER for temporary files
+
+        'paths': {
+            'home': DOWNLOAD_FOLDER
+        },
+
         'postprocessors': [{
             'key': 'FFmpegVideoConvertor',
             'preferedformat': 'mp4',
@@ -148,30 +152,30 @@ def download_video(
 
     with YoutubeDL(ydl_opts) as ydl:
 
-        info = ydl.extract_info(
+        ydl.extract_info(
             url,
             download=True
         )
 
-        filename = ydl.prepare_filename(
-            info
-        )
+    # =====================================
+    # FIND FINAL MP4
+    # =====================================
+    for file in os.listdir(DOWNLOAD_FOLDER):
 
-        filename = clean_filename(
-            filename
-        )
+        if (
+            file.startswith(unique_id)
+            and file.endswith(".mp4")
+        ):
 
-        # yt-dlp might output a different filename than expected, so we need to find it
-        # after download. It often includes the title and ID.
-        # We'll look for any .mp4 file that starts with our TEMP_FILE_PREFIX
-        downloaded_files = []
-        for file in os.listdir(DOWNLOAD_FOLDER):
-            if file.startswith(TEMP_FILE_PREFIX) and file.endswith(".mp4"):
-                downloaded_files.append(os.path.join(DOWNLOAD_FOLDER, file))
+            return os.path.join(
+                DOWNLOAD_FOLDER,
+                file
+            )
 
-        if downloaded_files:
-            # Assuming yt-dlp only downloads one video per call, return the first found
-            return downloaded_files[0]
+    raise Exception(
+        "Download failed."
+    )
+
 # =========================================
 # HANDLE MESSAGE
 # =========================================
@@ -331,18 +335,23 @@ async def button_handler(
             # =================================
             async def updater():
 
-                while True:
+                try:
 
-                    try:
+                    while True:
 
-                        await status.edit_text(
-                            last_update["text"]
-                        )
+                        try:
 
-                    except:
-                        pass
+                            await status.edit_text(
+                                last_update["text"]
+                            )
 
-                    await asyncio.sleep(2)
+                        except:
+                            pass
+
+                        await asyncio.sleep(2)
+
+                except asyncio.CancelledError:
+                    pass
 
             update_task = asyncio.create_task(
                 updater()
@@ -359,7 +368,16 @@ async def button_handler(
                 progress,
             )
 
+            # =================================
+            # CLEAN TASK
+            # =================================
             update_task.cancel()
+
+            try:
+                await update_task
+
+            except asyncio.CancelledError:
+                pass
 
             await status.edit_text(
                 f"Uploading "
@@ -400,11 +418,8 @@ async def button_handler(
             # DELETE FILE
             # =================================
             if os.path.exists(file_path):
+
                 os.remove(file_path)
-            # Also clean up any other temporary files left by yt-dlp for this download
-            for file in os.listdir(DOWNLOAD_FOLDER):
-                if file.startswith(TEMP_FILE_PREFIX) and file != os.path.basename(file_path):
-                    os.remove(os.path.join(DOWNLOAD_FOLDER, file))
 
         await status.edit_text(
             "All downloads completed."
