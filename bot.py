@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 
 from yt_dlp import YoutubeDL
@@ -36,6 +37,17 @@ os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 user_links = {}
 
 # =========================================
+# SAFE FILE NAME
+# =========================================
+def clean_filename(name):
+
+    return re.sub(
+        r'[\\\\/*?:"<>|]',
+        "",
+        name
+    )
+
+# =========================================
 # START COMMAND
 # =========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,22 +71,30 @@ def download_video(url, quality, progress_callback=None):
 
         if d['status'] == 'downloading':
 
-            downloaded = d.get('downloaded_bytes', 0)
+            downloaded = d.get(
+                'downloaded_bytes',
+                0
+            )
 
             total = (
                 d.get('total_bytes')
-                or d.get('total_bytes_estimate')
+                or d.get(
+                    'total_bytes_estimate'
+                )
                 or 0
             )
 
             if total > 0:
 
-                percent = downloaded / total * 100
+                percent = (
+                    downloaded / total
+                ) * 100
 
                 if progress_callback:
 
                     progress_callback(
-                        f"Downloading: {percent:.1f}%"
+                        f"Downloading: "
+                        f"{percent:.1f}%"
                     )
 
         elif d['status'] == 'finished':
@@ -90,7 +110,7 @@ def download_video(url, quality, progress_callback=None):
         'format': (
             f'bestvideo[height<={quality}]'
             f'+bestaudio/'
-            f'best[height<={quality}]'
+            f'/best[height<={quality}]'
         ),
 
         'outtmpl': os.path.join(
@@ -100,11 +120,19 @@ def download_video(url, quality, progress_callback=None):
 
         'merge_output_format': 'mp4',
 
+        'restrictfilenames': True,
+
         'noplaylist': True,
 
         'quiet': True,
 
         'progress_hooks': [hook],
+
+        'extractor_args': {
+            'generic': {
+                'impersonate': []
+            }
+        },
     }
 
     with YoutubeDL(ydl_opts) as ydl:
@@ -114,19 +142,32 @@ def download_video(url, quality, progress_callback=None):
             download=True
         )
 
-        final_path = ydl.prepare_filename(info)
+        filename = ydl.prepare_filename(info)
 
-        base = os.path.splitext(final_path)[0]
+        filename = clean_filename(filename)
+
+        base = os.path.splitext(filename)[0]
 
         merged_file = base + ".mp4"
 
-        # RETURN MERGED FILE
+        # FIND MERGED FILE
+        for file in os.listdir(DOWNLOAD_FOLDER):
+
+            if file.endswith(".mp4"):
+
+                return os.path.join(
+                    DOWNLOAD_FOLDER,
+                    file
+                )
+
+        # FALLBACK
         if os.path.exists(merged_file):
 
             return merged_file
 
-        # FALLBACK
-        return final_path
+        raise Exception(
+            "Merged video not found."
+        )
 
 # =========================================
 # HANDLE MESSAGE
@@ -140,9 +181,7 @@ async def handle_message(
 
     parts = text.split()
 
-    # =====================================
-    # MULTI EPISODE MODE
-    # =====================================
+    # MULTI EPISODES
     if "{}" in text and len(parts) == 3:
 
         base_url = parts[0]
@@ -156,18 +195,22 @@ async def handle_message(
         except:
 
             await update.message.reply_text(
-                "Episode numbers must be integers."
+                "Episode numbers must "
+                "be integers."
             )
 
             return
 
         urls = []
 
-        for ep in range(start_ep, end_ep + 1):
+        for ep in range(
+            start_ep,
+            end_ep + 1
+        ):
 
-            episode_url = base_url.format(ep)
-
-            urls.append(episode_url)
+            urls.append(
+                base_url.format(ep)
+            )
 
         user_links[
             update.effective_user.id
@@ -175,9 +218,6 @@ async def handle_message(
 
     else:
 
-        # =================================
-        # SINGLE VIDEO MODE
-        # =================================
         if not text.startswith("http"):
 
             await update.message.reply_text(
@@ -190,9 +230,7 @@ async def handle_message(
             update.effective_user.id
         ] = [text]
 
-    # =====================================
     # QUALITY BUTTONS
-    # =====================================
     keyboard = [
         [
             InlineKeyboardButton(
@@ -248,33 +286,35 @@ async def button_handler(
     urls = user_links[user_id]
 
     status = await query.message.reply_text(
-        f"Starting downloads in {quality}p..."
+        f"Starting downloads "
+        f"in {quality}p..."
     )
 
     try:
 
         total = len(urls)
 
-        for count, url in enumerate(urls, start=1):
+        for count, url in enumerate(
+            urls,
+            start=1
+        ):
 
             loop = asyncio.get_event_loop()
 
             last_update = {
-                "text": f"Downloading {count}/{total}..."
+                "text":
+                f"Downloading "
+                f"{count}/{total}..."
             }
 
-            # =================================
             # PROGRESS CALLBACK
-            # =================================
             def progress(text):
 
                 last_update["text"] = (
                     f"{count}/{total}\n{text}"
                 )
 
-            # =================================
-            # TELEGRAM MESSAGE UPDATER
-            # =================================
+            # TELEGRAM UPDATER
             async def updater():
 
                 while True:
@@ -294,9 +334,7 @@ async def button_handler(
                 updater()
             )
 
-            # =================================
             # DOWNLOAD
-            # =================================
             file_path = await loop.run_in_executor(
                 None,
                 download_video,
@@ -308,33 +346,32 @@ async def button_handler(
             update_task.cancel()
 
             await status.edit_text(
-                f"Uploading {count}/{total}..."
+                f"Uploading "
+                f"{count}/{total}..."
             )
 
-            # =================================
-            # CHECK FILE EXISTS
-            # =================================
+            # CHECK FILE
             if not os.path.exists(file_path):
 
                 await status.edit_text(
-                    "File not found after download."
+                    "Downloaded file missing."
                 )
 
                 continue
 
-            # =================================
             # UPLOAD VIDEO
-            # =================================
             with open(file_path, "rb") as video:
 
                 await query.message.reply_video(
                     video=video,
                     supports_streaming=True,
+                    read_timeout=120,
+                    write_timeout=120,
+                    connect_timeout=120,
+                    pool_timeout=120,
                 )
 
-            # =================================
             # DELETE FILE
-            # =================================
             if os.path.exists(file_path):
 
                 os.remove(file_path)
@@ -346,7 +383,7 @@ async def button_handler(
     except Exception as e:
 
         await status.edit_text(
-            f"Error:\n{e}"
+            f"Error:\n{str(e)}"
         )
 
 # =========================================
@@ -357,10 +394,10 @@ def main():
     app = (
         Application.builder()
         .token(BOT_TOKEN)
-        .connect_timeout(60)
-        .read_timeout(60)
-        .write_timeout(60)
-        .pool_timeout(60)
+        .connect_timeout(120)
+        .read_timeout(120)
+        .write_timeout(120)
+        .pool_timeout(120)
         .build()
     )
 
@@ -373,7 +410,8 @@ def main():
 
     app.add_handler(
         MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            filters.TEXT &
+            ~filters.COMMAND,
             handle_message,
         )
     )
@@ -389,7 +427,7 @@ def main():
     app.run_polling()
 
 # =========================================
-# RUN BOT
+# RUN
 # =========================================
 if __name__ == "__main__":
 
